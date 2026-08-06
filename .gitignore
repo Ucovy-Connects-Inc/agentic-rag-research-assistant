@@ -193,3 +193,12 @@ tests/
 .env.example
 .env.test
 .pre-commit-config.yaml
+DEEPSEEK_GPU_TESTING.md
+DEEPSEEK_README.md
+Dockerfile
+gradio_launcher.py
+LICENSE
+Makefile
+test_both_parsers.py
+test_parsers_simple.py
+uv.lock
