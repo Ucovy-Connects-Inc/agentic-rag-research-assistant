@@ -180,3 +180,16 @@ test_data/
 
 
 
+
+
+
+# New by Sibangi
+airflow/
+docs/
+src/
+scripts/
+static/
+tests/
+.env.example
+.env.test
+.pre-commit-config.yaml
