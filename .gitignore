@@ -202,3 +202,4 @@ Makefile
 test_both_parsers.py
 test_parsers_simple.py
 uv.lock
+README.md
