@@ -100,7 +100,8 @@ services:
       context: ./airflow
       dockerfile: Dockerfile
     container_name: rag-airflow
-    # user: "50000:0"  # Uncomment for WSL/Ubuntu, comment out for Mac
+    entrypoint: /entrypoint.sh
+    user: "50000:0"  # Uncomment for WSL/Ubuntu, comment out for Mac
     depends_on:
       postgres:
         condition: service_healthy
