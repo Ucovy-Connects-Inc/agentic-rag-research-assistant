@@ -179,14 +179,17 @@ test_output/
 test_data/
 
 
-
-
-
-
 # New by Sibangi
 airflow/
 docs/
-src/
+# Ignore everything inside src/
+src/*
+# Whitelist the parent services directory
+!src/services/
+# Ignore everything inside services/ by default
+src/services/*
+# Whitelist the pdf_parser directory
+!src/services/pdf_parser/
 scripts/
 static/
 tests/
