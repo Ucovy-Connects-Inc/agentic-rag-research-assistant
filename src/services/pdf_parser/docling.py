@@ -2,6 +2,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 
+import pypdfium2 as pdfium
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.document_converter import DocumentConverter, PdfFormatOption
@@ -10,16 +11,19 @@ from src.schemas.pdf_parser.models import PaperSection, ParserType, PdfContent
 
 logger = logging.getLogger(__name__)
 
+
 class DoclingParser:
-    """Docling PDF parser for scientific document processing running entirely on CPU."""
+    """Robust PDF parser using fast native PyPdfium2 extraction with Docling fallback."""
 
     def __init__(self, max_pages: int, max_file_size_mb: int, do_ocr: bool = False, do_table_structure: bool = True):
-        """Initialize DocumentConverter skipping advanced vision layouts."""
+        self.max_pages = max_pages
+        self.max_file_size_bytes = max_file_size_mb * 1024 * 1024
         
-        # Turn off heavy vision components to prevent Pydantic errors and model downloads
+        # Configure fallback Docling engine
         pipeline_options = PdfPipelineOptions()
         pipeline_options.do_ocr = False
         pipeline_options.do_table_structure = False
+        pipeline_options.images_scale = 0.2
 
         self._converter = DocumentConverter(
             format_options={
@@ -28,26 +32,79 @@ class DoclingParser:
                 )
             }
         )
-        
-        self._warmed_up = False
-        self.max_pages = max_pages
-        self.max_file_size_bytes = max_file_size_mb * 1024 * 1024
 
-    def _warm_up_models(self):
-        if not self._warmed_up:
-            self._warmed_up = True
-
-    def _validate_pdf(self, pdf_path: Path) -> bool:
+    def _validate_pdf(self, pdf_path: Path) -> int:
+        """Validate PDF file integrity, size, and page limits. Returns page count."""
         if pdf_path.stat().st_size == 0:
             raise PDFValidationError(f"PDF file is empty: {pdf_path}")
-        return True
+
+        file_size = pdf_path.stat().st_size
+        if file_size > self.max_file_size_bytes:
+            raise PDFValidationError(
+                f"PDF file too large: {file_size / 1024 / 1024:.1f}MB > {self.max_file_size_bytes}MB"
+            )
+
+        pdf_doc = pdfium.PdfDocument(str(pdf_path))
+        actual_pages = len(pdf_doc)
+        pdf_doc.close()
+
+        if actual_pages > self.max_pages:
+            raise PDFValidationError(
+                f"Document has {actual_pages} pages, exceeding max_pages limit of {self.max_pages}."
+            )
+
+        return actual_pages
+
+    def _parse_with_pdfium(self, pdf_path: Path) -> Optional[PdfContent]:
+        """Fast, low-memory text extraction using native pypdfium2."""
+        pdf_doc = pdfium.PdfDocument(str(pdf_path))
+        raw_text_parts = []
+        sections = []
+
+        for page_num, page in enumerate(pdf_doc):
+            text_page = page.get_textpage()
+            text = text_page.get_text_range()
+            if text and text.strip():
+                raw_text_parts.append(text.strip())
+                sections.append(
+                    PaperSection(
+                        title=f"Page {page_num + 1}",
+                        content=text.strip()
+                    )
+                )
+
+        pdf_doc.close()
+        full_text = "\n\n".join(raw_text_parts)
+
+        # If we extracted meaningful text, return it immediately
+        if len(full_text.strip()) > 100:
+            return PdfContent(
+                sections=sections,
+                figures=[],
+                tables=[],
+                raw_text=full_text,
+                references=[],
+                parser_used=ParserType.DOCLING,
+                metadata={"source": "pypdfium2_native", "note": "Fast CPU Text Extraction"},
+            )
+        return None
 
     async def parse_pdf(self, pdf_path: Path) -> Optional[PdfContent]:
         try:
             self._validate_pdf(pdf_path)
-            self._warm_up_models()
 
-            result = self._converter.convert(str(pdf_path), max_num_pages=self.max_pages, max_file_size=self.max_file_size_bytes)
+            # Strategy 1: Attempt fast programmatic parsing (No PyTorch/C++ vision overhead)
+            fast_result = self._parse_with_pdfium(pdf_path)
+            if fast_result:
+                return fast_result
+
+            # Strategy 2: Fallback to Docling if document appears to be scanned/image-only
+            logger.info("Native extraction yielded empty text. Falling back to Docling engine...")
+            result = self._converter.convert(
+                str(pdf_path), 
+                max_num_pages=self.max_pages, 
+                max_file_size=self.max_file_size_bytes
+            )
             doc = result.document
 
             sections = []
@@ -72,11 +129,14 @@ class DoclingParser:
                 raw_text=doc.export_to_text(),
                 references=[],
                 parser_used=ParserType.DOCLING,
-                metadata={"source": "docling", "note": "CPU Programmatic Extraction"},
+                metadata={"source": "docling_fallback", "note": "Standard Docling Fallback"},
             )
 
+        except PDFValidationError as e:
+            logger.info(f"Skipping PDF processing due to validation check: {e}")
+            return None
         except Exception as e:
-            raise PDFParsingException(f"Failed to parse PDF with Docling: {e}")
+            raise PDFParsingException(f"Failed to parse PDF: {e}")
 
 
 # import logging

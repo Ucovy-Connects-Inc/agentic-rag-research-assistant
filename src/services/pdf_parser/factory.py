@@ -24,11 +24,10 @@ from .parser import PDFParserService
 @lru_cache(maxsize=1)
 def make_pdf_parser_service() -> PDFParserService:
     """Create cached PDF parser service forced to Docling CPU mode."""
-    # We bypass the missing get_settings() entirely here
     return PDFParserService(
-        parser_type="docling",        # <-- Hardcoded to docling
-        max_pages=30,
+        parser_type="docling",
+        max_pages=30,                # Set to 30 so 25-page papers pass validation
         max_file_size_mb=20,
-        do_ocr=False,                 # <-- Fast on CPU
-        do_table_structure=False      # <-- Avoids the rt_detr_v2 error
+        do_ocr=False,
+        do_table_structure=False
     )
