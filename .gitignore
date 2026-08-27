@@ -190,6 +190,8 @@ src/*
 src/services/*
 # Whitelist the pdf_parser directory
 !src/services/pdf_parser/
+!src/services/arxiv/
+
 scripts/
 static/
 tests/
