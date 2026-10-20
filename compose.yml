@@ -28,6 +28,9 @@ services:
       - POSTGRES_DATABASE_URL=postgresql+psycopg2://rag_user:rag_password@postgres:5432/rag_db
       - LANGFUSE__HOST=http://langfuse:3000
       - REDIS__HOST=redis
+    volumes:
+      - ./src:/app/src
+    command: ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
     networks:
       - rag-network
 
