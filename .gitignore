@@ -110,6 +110,3 @@ langfuse_postgres_data/
 redis_data/
 test_pdfs/
 *.log
-
-docs/
-README.md
